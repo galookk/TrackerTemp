@@ -48,18 +48,34 @@ def get_wu_apikey():
     deja de funcionar, es la primera pieza a revisar.
     """
     resp = requests.get("https://www.wunderground.com/", headers=BROWSER_HEADERS, timeout=20)
-    match = re.search(r'"apiKey"\s*:\s*"([a-f0-9]+)"', resp.text)
-    if not match:
-        preview = resp.text[:400].replace("\n", " ").replace("\r", " ")
-        raise RuntimeError(
-            f"No se encontro apiKey (status HTTP={resp.status_code}, largo respuesta={len(resp.text)} caracteres). "
-            f"Primeros 400 caracteres de lo que devolvio el sitio: {preview}"
-        )
-    return match.group(1)
+
+    # Intento 1: el formato clasico "apiKey":"xxxxx"
+    match = re.search(r'"apiKey"\s*:\s*"([a-f0-9]{20,40})"', resp.text)
+    if match:
+        return match.group(1)
+
+    # Intento 2: cualquier variante razonable (comillas simples, sin espacio, etc.)
+    match = re.search(r'apiKey["\']?\s*[:=]\s*["\']([a-f0-9]{20,40})["\']', resp.text, re.IGNORECASE)
+    if match:
+        return match.group(1)
+
+    # Si no aparece de ninguna forma, junto contexto alrededor de "apikey"
+    # (si existe en cualquier capitalizacion) para diagnosticar por Telegram.
+    lower = resp.text.lower()
+    idx = lower.find("apikey")
+    if idx != -1:
+        contexto = resp.text[max(0, idx - 60): idx + 150].replace("\n", " ")
+        pista = f'Se encontro la palabra "apikey" pero con un formato distinto al esperado. Contexto: {contexto}'
+    else:
+        pista = 'La palabra "apikey" no aparece en absoluto en el HTML descargado (puede cargarse via JavaScript despues).'
+
+    raise RuntimeError(
+        f"No se pudo extraer el apiKey (status HTTP={resp.status_code}, largo respuesta={len(resp.text)} caracteres). {pista}"
+    )
 
 
 def get_wu_forecast(lat, lon, api_key, days):
-    """Devuelve lista de (fecha_local, temp_max_c) segun WunderGround/weather.com."""
+    """Devuelve lista de (fecha_local, temp_max_c, temp_min_c) segun WunderGround/weather.com."""
     url = "https://api.weather.com/v3/wx/forecast/daily/5day"
     params = {
         "apiKey": api_key,
@@ -73,20 +89,23 @@ def get_wu_forecast(lat, lon, api_key, days):
     data = resp.json()
 
     max_temps = data.get("calendarDayTemperatureMax")
+    min_temps = data.get("calendarDayTemperatureMin")
     valid_dates = data.get("validTimeLocal")
     if not max_temps or not valid_dates:
         raise RuntimeError(f"Respuesta inesperada de weather.com: {str(data)[:300]}")
 
+    min_temps = min_temps or [None] * len(max_temps)
+
     resultado = []
-    for fecha_iso, temp in list(zip(valid_dates, max_temps))[:days]:
+    for fecha_iso, tmax, tmin in list(zip(valid_dates, max_temps, min_temps))[:days]:
         fecha = fecha_iso[:10]  # "2026-08-12T07:00:00-0300" -> "2026-08-12"
-        resultado.append((fecha, temp))
+        resultado.append((fecha, tmax, tmin))
     return resultado
 
 
 def get_yr_forecast(lat, lon, tz_name, days):
-    """Devuelve lista de (fecha_local, temp_max_c) segun Yr.no, agrupando
-    los datos horarios por dia CALENDARIO LOCAL de la ciudad (no UTC)."""
+    """Devuelve lista de (fecha_local, temp_max_c, temp_min_c) segun Yr.no,
+    agrupando los datos horarios por dia CALENDARIO LOCAL de la ciudad (no UTC)."""
     url = "https://api.met.no/weatherapi/locationforecast/2.0/compact"
     params = {"lat": lat, "lon": lon}
     resp = requests.get(url, params=params, headers=YR_HEADERS, timeout=20)
@@ -104,7 +123,7 @@ def get_yr_forecast(lat, lon, tz_name, days):
             temps_por_dia.setdefault(fecha_local, []).append(temp)
 
     fechas_ordenadas = sorted(temps_por_dia.keys())[:days]
-    return [(fecha, max(temps_por_dia[fecha])) for fecha in fechas_ordenadas]
+    return [(fecha, max(temps_por_dia[fecha]), min(temps_por_dia[fecha])) for fecha in fechas_ordenadas]
 
 
 def append_rows(rows):
@@ -113,7 +132,7 @@ def append_rows(rows):
     with open(DATA_FILE, "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         if not file_exists:
-            writer.writerow(["timestamp_utc", "ciudad", "fuente", "fecha_objetivo", "temp_max_c"])
+            writer.writerow(["timestamp_utc", "ciudad", "fuente", "fecha_objetivo", "temp_max_c", "temp_min_c"])
         writer.writerows(rows)
 
 
@@ -150,16 +169,16 @@ def main():
 
         if wu_key:
             try:
-                for fecha, temp in get_wu_forecast(lat, lon, wu_key, days):
-                    rows.append([now.isoformat(), name, "wunderground", fecha, temp])
-                    lineas_resumen.append(f"  WU  {fecha}: {temp}°C")
+                for fecha, tmax, tmin in get_wu_forecast(lat, lon, wu_key, days):
+                    rows.append([now.isoformat(), name, "wunderground", fecha, tmax, tmin])
+                    lineas_resumen.append(f"  WU  {fecha}: max {tmax}°C / min {tmin}°C")
             except Exception as e:
                 lineas_resumen.append(f"  ⚠️ WU error: {e}")
 
         try:
-            for fecha, temp in get_yr_forecast(lat, lon, tz_name, days):
-                rows.append([now.isoformat(), name, "yr.no", fecha, temp])
-                lineas_resumen.append(f"  Yr  {fecha}: {temp}°C")
+            for fecha, tmax, tmin in get_yr_forecast(lat, lon, tz_name, days):
+                rows.append([now.isoformat(), name, "yr.no", fecha, tmax, tmin])
+                lineas_resumen.append(f"  Yr  {fecha}: max {tmax}°C / min {tmin}°C")
         except Exception as e:
             lineas_resumen.append(f"  ⚠️ Yr error: {e}")
 
