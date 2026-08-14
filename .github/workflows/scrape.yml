@@ -1,0 +1,40 @@
+name: Registrar pronosticos
+
+on:
+  # 21:00, 04:00, 10:00, 17:00 hora Argentina (UTC-3, sin horario de verano)
+  # = 00:00, 07:00, 13:00, 20:00 UTC
+  schedule:
+    - cron: "0 0,7,13,20 * * *"
+  # Permite dispararlo a mano desde la pestaña "Actions" para probar
+  workflow_dispatch: {}
+
+jobs:
+  registrar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout del repo
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: pip install requests
+
+      - name: Correr el script
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python scrape.py
+
+      - name: Commitear el CSV actualizado
+        run: |
+          git config user.name "temp-tracker-bot"
+          git config user.email "actions@github.com"
+          git add data/temperaturas.csv
+          git diff --cached --quiet || git commit -m "Registro automatico $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push
