@@ -1,20 +1,23 @@
 {
-  "dias_a_registrar": 5,
+  "dias_a_registrar": 3,
   "cities": [
     {
       "name": "Buenos Aires (SAEZ - Ezeiza)",
+      "flag": "🇦🇷",
       "lat": -34.8222,
       "lon": -58.5358,
       "tz": "America/Argentina/Buenos_Aires"
     },
     {
       "name": "Tokyo (RJTT - Haneda)",
+      "flag": "🇯🇵",
       "lat": 35.5497,
       "lon": 139.7870,
       "tz": "Asia/Tokyo"
     },
     {
       "name": "Munich (EDDM)",
+      "flag": "🇩🇪",
       "lat": 48.3538,
       "lon": 11.7861,
       "tz": "Europe/Berlin"
