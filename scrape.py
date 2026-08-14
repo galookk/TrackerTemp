@@ -48,10 +48,13 @@ def get_wu_apikey():
     deja de funcionar, es la primera pieza a revisar.
     """
     resp = requests.get("https://www.wunderground.com/", headers=BROWSER_HEADERS, timeout=20)
-    resp.raise_for_status()
     match = re.search(r'"apiKey"\s*:\s*"([a-f0-9]+)"', resp.text)
     if not match:
-        raise RuntimeError("No se encontro apiKey en el HTML de wunderground.com (el sitio pudo haber cambiado)")
+        preview = resp.text[:400].replace("\n", " ").replace("\r", " ")
+        raise RuntimeError(
+            f"No se encontro apiKey (status HTTP={resp.status_code}, largo respuesta={len(resp.text)} caracteres). "
+            f"Primeros 400 caracteres de lo que devolvio el sitio: {preview}"
+        )
     return match.group(1)
 
 
