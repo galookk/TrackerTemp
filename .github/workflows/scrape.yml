@@ -1,10 +1,10 @@
 name: Registrar pronosticos
 
 on:
-  # 21:00, 04:00, 10:00, 17:00 hora Argentina (UTC-3, sin horario de verano)
-  # = 00:00, 07:00, 13:00, 20:00 UTC
+  # 12 corridas diarias (~cada 2hs), incluyendo EXACTOS tus 4 horarios
+  # originales: 21hs/4hs/10hs/17hs Argentina = 0/7/13/20 UTC
   schedule:
-    - cron: "0 0,7,13,20 * * *"
+    - cron: "0 0,2,4,6,7,9,11,13,15,17,20,22 * * *"
   # Permite dispararlo a mano desde la pestaña "Actions" para probar
   workflow_dispatch: {}
 
@@ -29,6 +29,7 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GOOGLE_SHEETS_WEBHOOK_URL: ${{ secrets.GOOGLE_SHEETS_WEBHOOK_URL }}
         run: python scrape.py
 
       - name: Commitear el CSV actualizado
