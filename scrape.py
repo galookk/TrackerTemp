@@ -59,6 +59,11 @@ def get_wu_apikey():
     if match:
         return match.group(1)
 
+    # Intento 3: apiKey como parametro dentro de una URL, ej ...?apiKey=xxxxx&...
+    match = re.search(r'[?&]apiKey=([a-f0-9]{20,40})', resp.text, re.IGNORECASE)
+    if match:
+        return match.group(1)
+
     # Si no aparece de ninguna forma, junto contexto alrededor de "apikey"
     # (si existe en cualquier capitalizacion) para diagnosticar por Telegram.
     lower = resp.text.lower()
