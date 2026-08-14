@@ -34,6 +34,21 @@ YR_HEADERS = {
     "User-Agent": "temp-tracker-galo/1.0 github.com/TU_USUARIO/temp-tracker"
 }
 
+DIAS_ES = {0: "LUNES", 1: "MARTES", 2: "MIÉRCOLES", 3: "JUEVES", 4: "VIERNES", 5: "SÁBADO", 6: "DOMINGO"}
+
+
+def nombre_dia(fecha_iso):
+    fecha = datetime.date.fromisoformat(fecha_iso)
+    return DIAS_ES[fecha.weekday()]
+
+
+def formatear_bloque_fuente(emoji, nombre_fuente, forecast):
+    """forecast: lista de (fecha, temp_max, temp_min). Muestra solo la maxima."""
+    lineas = [f"{emoji} {nombre_fuente}"]
+    for fecha, tmax, _tmin in forecast:
+        lineas.append(f"- {nombre_dia(fecha)} {fecha}: max {tmax}°C")
+    return "\n".join(lineas)
+
 
 def load_config():
     with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -149,49 +164,61 @@ def send_telegram(text):
         return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
-        requests.post(url, data={"chat_id": chat_id, "text": text}, timeout=20)
+        requests.post(
+            url,
+            data={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
+            timeout=20,
+        )
     except Exception as e:
         print(f"No se pudo enviar el mensaje de Telegram: {e}")
 
 
 def main():
     config = load_config()
-    days = config.get("dias_a_registrar", 5)
+    days = config.get("dias_a_registrar", 3)
     now = datetime.datetime.now(datetime.timezone.utc)
 
     rows = []
-    lineas_resumen = [f"Registro de pronosticos - {now.strftime('%Y-%m-%d %H:%M UTC')}"]
+    bloques_mensaje = [f"Registro de pronosticos - {now.strftime('%Y-%m-%d %H:%M UTC')}"]
 
     try:
         wu_key = get_wu_apikey()
     except Exception as e:
         wu_key = None
-        lineas_resumen.append(f"⚠️ WunderGround no disponible esta corrida: {e}")
+        bloques_mensaje.append(f"⚠️ WunderGround no disponible esta corrida: {e}")
 
     for city in config["cities"]:
-        name, lat, lon, tz_name = city["name"], city["lat"], city["lon"], city["tz"]
-        lineas_resumen.append(f"\n{name}:")
+        name = city["name"]
+        flag = city.get("flag", "")
+        lat, lon, tz_name = city["lat"], city["lon"], city["tz"]
+
+        partes_ciudad = [f"{flag} <b>{name}</b>".strip()]
 
         if wu_key:
             try:
-                for fecha, tmax, tmin in get_wu_forecast(lat, lon, wu_key, days):
+                wu_forecast = get_wu_forecast(lat, lon, wu_key, days)
+                for fecha, tmax, tmin in wu_forecast:
                     rows.append([now.isoformat(), name, "wunderground", fecha, tmax, tmin])
-                    lineas_resumen.append(f"  WU  {fecha}: max {tmax}°C / min {tmin}°C")
+                partes_ciudad.append(formatear_bloque_fuente("2️⃣", "WU", wu_forecast))
             except Exception as e:
-                lineas_resumen.append(f"  ⚠️ WU error: {e}")
+                partes_ciudad.append(f"⚠️ WU error: {e}")
 
         try:
-            for fecha, tmax, tmin in get_yr_forecast(lat, lon, tz_name, days):
+            yr_forecast = get_yr_forecast(lat, lon, tz_name, days)
+            for fecha, tmax, tmin in yr_forecast:
                 rows.append([now.isoformat(), name, "yr.no", fecha, tmax, tmin])
-                lineas_resumen.append(f"  Yr  {fecha}: max {tmax}°C / min {tmin}°C")
+            partes_ciudad.append(formatear_bloque_fuente("3️⃣", "YR", yr_forecast))
         except Exception as e:
-            lineas_resumen.append(f"  ⚠️ Yr error: {e}")
+            partes_ciudad.append(f"⚠️ Yr error: {e}")
+
+        bloques_mensaje.append("\n".join(partes_ciudad))
 
     if rows:
         append_rows(rows)
 
-    send_telegram("\n".join(lineas_resumen))
-    print("\n".join(lineas_resumen))
+    mensaje_final = "\n\n".join(bloques_mensaje)
+    send_telegram(mensaje_final)
+    print(mensaje_final)
 
 
 if __name__ == "__main__":
