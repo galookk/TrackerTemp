@@ -1,0 +1,23 @@
+{
+  "dias_a_registrar": 5,
+  "cities": [
+    {
+      "name": "Buenos Aires",
+      "lat": -34.6037,
+      "lon": -58.3816,
+      "tz": "America/Argentina/Buenos_Aires"
+    },
+    {
+      "name": "Tokyo",
+      "lat": 35.6762,
+      "lon": 139.6503,
+      "tz": "Asia/Tokyo"
+    },
+    {
+      "name": "Munich",
+      "lat": 48.1351,
+      "lon": 11.5820,
+      "tz": "Europe/Berlin"
+    }
+  ]
+}
