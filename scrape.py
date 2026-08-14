@@ -36,6 +36,10 @@ YR_HEADERS = {
 
 DIAS_ES = {0: "LUNES", 1: "MARTES", 2: "MIÉRCOLES", 3: "JUEVES", 4: "VIERNES", 5: "SÁBADO", 6: "DOMINGO"}
 
+# Horas UTC (de las 12 corridas diarias) en las que SI se manda Telegram.
+# Corresponden a 21hs / 4hs / 10hs / 17hs hora Argentina.
+CHECKPOINT_HORAS_UTC = {0, 7, 13, 20}
+
 
 def nombre_dia(fecha_iso):
     fecha = datetime.date.fromisoformat(fecha_iso)
@@ -152,8 +156,25 @@ def append_rows(rows):
     with open(DATA_FILE, "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         if not file_exists:
-            writer.writerow(["timestamp_utc", "ciudad", "fuente", "fecha_objetivo", "temp_max_c", "temp_min_c"])
+            writer.writerow(
+                ["timestamp_utc", "hora_consulta_utc", "ciudad", "fuente", "fecha_objetivo", "temp_max_c", "temp_min_c"]
+            )
         writer.writerows(rows)
+
+
+def send_to_sheets(rows):
+    """Manda las filas a la Google Sheet via el Web App de Apps Script (ver apps_script.gs)."""
+    webhook_url = os.environ.get("GOOGLE_SHEETS_WEBHOOK_URL")
+    if not webhook_url:
+        print("Google Sheets no configurado (falta GOOGLE_SHEETS_WEBHOOK_URL), salteando")
+        return
+    columnas = ["timestamp_utc", "hora_consulta_utc", "ciudad", "fuente", "fecha_objetivo", "temp_max_c", "temp_min_c"]
+    payload = {"rows": [dict(zip(columnas, row)) for row in rows]}
+    try:
+        resp = requests.post(webhook_url, json=payload, timeout=30)
+        print(f"Google Sheets respondio status={resp.status_code}")
+    except Exception as e:
+        print(f"No se pudo mandar los datos a Google Sheets: {e}")
 
 
 def send_telegram(text):
@@ -177,6 +198,8 @@ def main():
     config = load_config()
     days = config.get("dias_a_registrar", 3)
     now = datetime.datetime.now(datetime.timezone.utc)
+    hora_consulta = now.strftime("%H:00")
+    es_checkpoint = now.hour in CHECKPOINT_HORAS_UTC
 
     rows = []
     bloques_mensaje = [f"Registro de pronosticos - {now.strftime('%Y-%m-%d %H:%M UTC')}"]
@@ -198,7 +221,7 @@ def main():
             try:
                 wu_forecast = get_wu_forecast(lat, lon, wu_key, days)
                 for fecha, tmax, tmin in wu_forecast:
-                    rows.append([now.isoformat(), name, "wunderground", fecha, tmax, tmin])
+                    rows.append([now.isoformat(), hora_consulta, name, "wunderground", fecha, tmax, tmin])
                 partes_ciudad.append(formatear_bloque_fuente("2️⃣", "WU", wu_forecast))
             except Exception as e:
                 partes_ciudad.append(f"⚠️ WU error: {e}")
@@ -206,7 +229,7 @@ def main():
         try:
             yr_forecast = get_yr_forecast(lat, lon, tz_name, days)
             for fecha, tmax, tmin in yr_forecast:
-                rows.append([now.isoformat(), name, "yr.no", fecha, tmax, tmin])
+                rows.append([now.isoformat(), hora_consulta, name, "yr.no", fecha, tmax, tmin])
             partes_ciudad.append(formatear_bloque_fuente("3️⃣", "YR", yr_forecast))
         except Exception as e:
             partes_ciudad.append(f"⚠️ Yr error: {e}")
@@ -215,9 +238,13 @@ def main():
 
     if rows:
         append_rows(rows)
+        send_to_sheets(rows)
 
     mensaje_final = "\n\n".join(bloques_mensaje)
-    send_telegram(mensaje_final)
+    if es_checkpoint:
+        send_telegram(mensaje_final)
+    else:
+        print("(corrida silenciosa, no es horario de aviso -> no se manda Telegram)")
     print(mensaje_final)
 
 
