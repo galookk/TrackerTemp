@@ -1,10 +1,12 @@
 name: Registrar pronosticos
 
 on:
-  # 12 corridas diarias (~cada 2hs), incluyendo EXACTOS tus 4 horarios
-  # originales: 21hs/4hs/10hs/17hs Argentina = 0/7/13/20 UTC
+  # 15 corridas diarias. Incluye EXACTOS:
+  #  - Tus 4 horarios de aviso por Telegram: 21/4/10/17hs ART = 0/7/13/20 UTC
+  #  - Tus 5 checkpoints para la herramienta local: 6/11/15/20/1hs ART = 9/14/18/23/4 UTC
+  #  - Mas algunos horarios intermedios para mantener ~cada 2hs de cobertura general
   schedule:
-    - cron: "0 0,2,4,6,7,9,11,13,15,17,20,22 * * *"
+    - cron: "0 0,2,4,6,7,9,11,13,14,15,17,18,20,22,23 * * *"
   # Permite dispararlo a mano desde la pestaña "Actions" para probar
   workflow_dispatch: {}
 
