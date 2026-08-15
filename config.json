@@ -2,25 +2,76 @@
   "dias_a_registrar": 3,
   "cities": [
     {
+      "name": "Austin (KAUS)",
+      "nombre_local": "Austin (bregst)",
+      "flag": "🇺🇸",
+      "lat": 30.1945,
+      "lon": -97.6699,
+      "tz": "America/Chicago"
+    },
+    {
+      "name": "New York (KLGA - LaGuardia)",
+      "nombre_local": "New york",
+      "flag": "🇺🇸",
+      "lat": 40.7772,
+      "lon": -73.8726,
+      "tz": "America/New_York"
+    },
+    {
+      "name": "Seattle (KSEA - Tacoma)",
+      "nombre_local": "Seattle (tacoma)",
+      "flag": "🇺🇸",
+      "lat": 47.4490,
+      "lon": -122.3088,
+      "tz": "America/Los_Angeles"
+    },
+    {
       "name": "Buenos Aires (SAEZ - Ezeiza)",
+      "nombre_local": "BA",
       "flag": "🇦🇷",
       "lat": -34.8222,
       "lon": -58.5358,
       "tz": "America/Argentina/Buenos_Aires"
     },
     {
+      "name": "Amsterdam (EHAM - Schiphol)",
+      "nombre_local": "Amsterdam",
+      "flag": "🇳🇱",
+      "lat": 52.3086,
+      "lon": 4.7639,
+      "tz": "Europe/Amsterdam"
+    },
+    {
+      "name": "London (EGLC - City Airport)",
+      "nombre_local": "Londres",
+      "flag": "🇬🇧",
+      "lat": 51.5053,
+      "lon": 0.0553,
+      "tz": "Europe/London"
+    },
+    {
+      "name": "Munich (EDDM)",
+      "nombre_local": "Munich",
+      "flag": "🇩🇪",
+      "lat": 48.3538,
+      "lon": 11.7861,
+      "tz": "Europe/Berlin"
+    },
+    {
       "name": "Tokyo (RJTT - Haneda)",
+      "nombre_local": "Tokyo",
       "flag": "🇯🇵",
       "lat": 35.5497,
       "lon": 139.7870,
       "tz": "Asia/Tokyo"
     },
     {
-      "name": "Munich (EDDM)",
-      "flag": "🇩🇪",
-      "lat": 48.3538,
-      "lon": 11.7861,
-      "tz": "Europe/Berlin"
+      "name": "Busan (RKPK - Gimhae)",
+      "nombre_local": "Busan",
+      "flag": "🇰🇷",
+      "lat": 35.1795,
+      "lon": 128.9380,
+      "tz": "Asia/Seoul"
     }
   ]
 }
