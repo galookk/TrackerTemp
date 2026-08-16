@@ -8,7 +8,13 @@ on:
   schedule:
     - cron: "0 0,2,4,6,7,9,11,13,14,15,17,18,20,22,23 * * *"
   # Permite dispararlo a mano desde la pestaña "Actions" para probar
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      forzar_telegram:
+        description: "Mandar Telegram aunque no sea horario de aviso (para probar)"
+        required: false
+        default: true
+        type: boolean
 
 jobs:
   registrar:
@@ -32,6 +38,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GOOGLE_SHEETS_WEBHOOK_URL: ${{ secrets.GOOGLE_SHEETS_WEBHOOK_URL }}
+          FORZAR_TELEGRAM: ${{ github.event.inputs.forzar_telegram }}
         run: python scrape.py
 
       - name: Commitear el CSV actualizado
