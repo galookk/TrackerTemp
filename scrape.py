@@ -199,7 +199,7 @@ def main():
     days = config.get("dias_a_registrar", 3)
     now = datetime.datetime.now(datetime.timezone.utc)
     hora_consulta = now.strftime("%H:00")
-    es_checkpoint = now.hour in CHECKPOINT_HORAS_UTC
+    es_checkpoint = now.hour in CHECKPOINT_HORAS_UTC or os.environ.get("FORZAR_TELEGRAM") == "true"
 
     rows = []
     bloques_mensaje = [f"Registro de pronosticos - {now.strftime('%Y-%m-%d %H:%M UTC')}"]
