@@ -46,12 +46,18 @@ def nombre_dia(fecha_iso):
     return DIAS_ES[fecha.weekday()]
 
 
-def formatear_bloque_fuente(emoji, nombre_fuente, forecast):
+def formatear_bloque_fuente(emoji, nombre_fuente, forecast, unidad):
     """forecast: lista de (fecha, temp_max, temp_min). Muestra solo la maxima."""
     lineas = [f"{emoji} {nombre_fuente}"]
     for fecha, tmax, _tmin in forecast:
-        lineas.append(f"- {nombre_dia(fecha)} {fecha}: max {tmax}°C")
+        lineas.append(f"- {nombre_dia(fecha)} {fecha}: max {tmax}°{unidad}")
     return "\n".join(lineas)
+
+
+def celsius_a_fahrenheit(temp_c):
+    if temp_c is None:
+        return None
+    return round(temp_c * 9 / 5 + 32, 1)
 
 
 def load_config():
@@ -98,14 +104,15 @@ def get_wu_apikey():
     )
 
 
-def get_wu_forecast(lat, lon, api_key, days):
-    """Devuelve lista de (fecha_local, temp_max_c, temp_min_c) segun WunderGround/weather.com."""
+def get_wu_forecast(lat, lon, api_key, days, unidad="C"):
+    """Devuelve lista de (fecha_local, temp_max, temp_min) segun WunderGround/weather.com.
+    Si unidad='F' le pide directamente Fahrenheit a la API (mas preciso que convertir despues)."""
     url = "https://api.weather.com/v3/wx/forecast/daily/5day"
     params = {
         "apiKey": api_key,
         "geocode": f"{lat},{lon}",
         "format": "json",
-        "units": "m",
+        "units": "e" if unidad == "F" else "m",
         "language": "en-US",
     }
     resp = requests.get(url, params=params, headers=BROWSER_HEADERS, timeout=20)
@@ -127,9 +134,10 @@ def get_wu_forecast(lat, lon, api_key, days):
     return resultado
 
 
-def get_yr_forecast(lat, lon, tz_name, days):
-    """Devuelve lista de (fecha_local, temp_max_c, temp_min_c) segun Yr.no,
-    agrupando los datos horarios por dia CALENDARIO LOCAL de la ciudad (no UTC)."""
+def get_yr_forecast(lat, lon, tz_name, days, unidad="C"):
+    """Devuelve lista de (fecha_local, temp_max, temp_min) segun Yr.no,
+    agrupando los datos horarios por dia CALENDARIO LOCAL de la ciudad (no UTC).
+    Yr.no solo entrega Celsius; si unidad='F' se convierte aca."""
     url = "https://api.met.no/weatherapi/locationforecast/2.0/compact"
     params = {"lat": lat, "lon": lon}
     resp = requests.get(url, params=params, headers=YR_HEADERS, timeout=20)
@@ -147,7 +155,15 @@ def get_yr_forecast(lat, lon, tz_name, days):
             temps_por_dia.setdefault(fecha_local, []).append(temp)
 
     fechas_ordenadas = sorted(temps_por_dia.keys())[:days]
-    return [(fecha, max(temps_por_dia[fecha]), min(temps_por_dia[fecha])) for fecha in fechas_ordenadas]
+    resultado = []
+    for fecha in fechas_ordenadas:
+        tmax_c = max(temps_por_dia[fecha])
+        tmin_c = min(temps_por_dia[fecha])
+        if unidad == "F":
+            resultado.append((fecha, celsius_a_fahrenheit(tmax_c), celsius_a_fahrenheit(tmin_c)))
+        else:
+            resultado.append((fecha, tmax_c, tmin_c))
+    return resultado
 
 
 def append_rows(rows):
@@ -157,7 +173,7 @@ def append_rows(rows):
         writer = csv.writer(f)
         if not file_exists:
             writer.writerow(
-                ["timestamp_utc", "hora_consulta_utc", "ciudad", "fuente", "fecha_objetivo", "temp_max_c", "temp_min_c"]
+                ["timestamp_utc", "hora_consulta_utc", "ciudad", "fuente", "fecha_objetivo", "temp_max_c", "temp_min_c", "unidad"]
             )
         writer.writerows(rows)
 
@@ -168,7 +184,7 @@ def send_to_sheets(rows):
     if not webhook_url:
         print("Google Sheets no configurado (falta GOOGLE_SHEETS_WEBHOOK_URL), salteando")
         return
-    columnas = ["timestamp_utc", "hora_consulta_utc", "ciudad", "fuente", "fecha_objetivo", "temp_max_c", "temp_min_c"]
+    columnas = ["timestamp_utc", "hora_consulta_utc", "ciudad", "fuente", "fecha_objetivo", "temp_max_c", "temp_min_c", "unidad"]
     payload = {"rows": [dict(zip(columnas, row)) for row in rows]}
     try:
         resp = requests.post(webhook_url, json=payload, timeout=30)
@@ -213,24 +229,25 @@ def main():
     for city in config["cities"]:
         name = city["name"]
         flag = city.get("flag", "")
+        unidad = city.get("unidad", "C")
         lat, lon, tz_name = city["lat"], city["lon"], city["tz"]
 
         partes_ciudad = [f"{flag} <b>{name}</b>".strip()]
 
         if wu_key:
             try:
-                wu_forecast = get_wu_forecast(lat, lon, wu_key, days)
+                wu_forecast = get_wu_forecast(lat, lon, wu_key, days, unidad)
                 for fecha, tmax, tmin in wu_forecast:
-                    rows.append([now.isoformat(), hora_consulta, name, "wunderground", fecha, tmax, tmin])
-                partes_ciudad.append(formatear_bloque_fuente("2️⃣", "WU", wu_forecast))
+                    rows.append([now.isoformat(), hora_consulta, name, "wunderground", fecha, tmax, tmin, unidad])
+                partes_ciudad.append(formatear_bloque_fuente("2️⃣", "WU", wu_forecast, unidad))
             except Exception as e:
                 partes_ciudad.append(f"⚠️ WU error: {e}")
 
         try:
-            yr_forecast = get_yr_forecast(lat, lon, tz_name, days)
+            yr_forecast = get_yr_forecast(lat, lon, tz_name, days, unidad)
             for fecha, tmax, tmin in yr_forecast:
-                rows.append([now.isoformat(), hora_consulta, name, "yr.no", fecha, tmax, tmin])
-            partes_ciudad.append(formatear_bloque_fuente("3️⃣", "YR", yr_forecast))
+                rows.append([now.isoformat(), hora_consulta, name, "yr.no", fecha, tmax, tmin, unidad])
+            partes_ciudad.append(formatear_bloque_fuente("3️⃣", "YR", yr_forecast, unidad))
         except Exception as e:
             partes_ciudad.append(f"⚠️ Yr error: {e}")
 
