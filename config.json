@@ -7,7 +7,8 @@
       "flag": "🇺🇸",
       "lat": 30.1945,
       "lon": -97.6699,
-      "tz": "America/Chicago"
+      "tz": "America/Chicago",
+      "unidad": "F"
     },
     {
       "name": "New York (KLGA - LaGuardia)",
@@ -15,7 +16,8 @@
       "flag": "🇺🇸",
       "lat": 40.7772,
       "lon": -73.8726,
-      "tz": "America/New_York"
+      "tz": "America/New_York",
+      "unidad": "F"
     },
     {
       "name": "Seattle (KSEA - Tacoma)",
@@ -23,7 +25,8 @@
       "flag": "🇺🇸",
       "lat": 47.4490,
       "lon": -122.3088,
-      "tz": "America/Los_Angeles"
+      "tz": "America/Los_Angeles",
+      "unidad": "F"
     },
     {
       "name": "Buenos Aires (SAEZ - Ezeiza)",
