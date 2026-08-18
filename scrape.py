@@ -173,7 +173,7 @@ def append_rows(rows):
         writer = csv.writer(f)
         if not file_exists:
             writer.writerow(
-                ["timestamp_utc", "hora_consulta_utc", "ciudad", "fuente", "fecha_objetivo", "temp_max_c", "temp_min_c", "unidad"]
+                ["timestamp_utc", "hora_consulta_utc", "ciudad", "fuente", "fecha_objetivo", "temp_max_c", "temp_min_c", "unidad", "dias_antes"]
             )
         writer.writerows(rows)
 
@@ -184,7 +184,7 @@ def send_to_sheets(rows):
     if not webhook_url:
         print("Google Sheets no configurado (falta GOOGLE_SHEETS_WEBHOOK_URL), salteando")
         return
-    columnas = ["timestamp_utc", "hora_consulta_utc", "ciudad", "fuente", "fecha_objetivo", "temp_max_c", "temp_min_c", "unidad"]
+    columnas = ["timestamp_utc", "hora_consulta_utc", "ciudad", "fuente", "fecha_objetivo", "temp_max_c", "temp_min_c", "unidad", "dias_antes"]
     payload = {"rows": [dict(zip(columnas, row)) for row in rows]}
     try:
         resp = requests.post(webhook_url, json=payload, timeout=30)
@@ -210,12 +210,31 @@ def send_telegram(text):
         print(f"No se pudo enviar el mensaje de Telegram: {e}")
 
 
+def obtener_hora_objetivo(now):
+    """Si esta corrida vino de un cron programado, usa la hora que estaba
+    PROGRAMADA (ej. "04:00"), no la hora real en que arranco el script --
+    GitHub Actions puede demorar una corrida programada 1-2 horas bajo
+    carga, y si usaramos la hora real, el dato quedaria mal etiquetado.
+    Si no viene de un cron (corrida manual), usa la hora real actual."""
+    cron_str = os.environ.get("CRON_PROGRAMADO", "").strip()
+    if cron_str:
+        partes = cron_str.split()
+        if len(partes) >= 2:
+            try:
+                hora = int(partes[1])
+                return f"{hora:02d}:00"
+            except ValueError:
+                pass
+    return now.strftime("%H:00")
+
+
 def main():
     config = load_config()
     days = config.get("dias_a_registrar", 3)
     now = datetime.datetime.now(datetime.timezone.utc)
-    hora_consulta = now.strftime("%H:00")
-    es_checkpoint = now.hour in CHECKPOINT_HORAS_UTC or os.environ.get("FORZAR_TELEGRAM") == "true"
+    hora_consulta = obtener_hora_objetivo(now)
+    hora_num = int(hora_consulta[:2])
+    es_checkpoint = hora_num in CHECKPOINT_HORAS_UTC or os.environ.get("FORZAR_TELEGRAM") == "true"
 
     rows = []
     bloques_mensaje = [f"Registro de pronosticos - {now.strftime('%Y-%m-%d %H:%M UTC')}"]
@@ -232,13 +251,18 @@ def main():
         unidad = city.get("unidad", "C")
         lat, lon, tz_name = city["lat"], city["lon"], city["tz"]
 
+        # Fecha de HOY en el huso horario propio de esta ciudad (no UTC, no ART) --
+        # es la referencia correcta para saber "cuantos dias antes" es cada dato.
+        fecha_local_ciudad = now.astimezone(ZoneInfo(tz_name)).date()
+
         partes_ciudad = [f"{flag} <b>{name}</b>".strip()]
 
         if wu_key:
             try:
                 wu_forecast = get_wu_forecast(lat, lon, wu_key, days, unidad)
                 for fecha, tmax, tmin in wu_forecast:
-                    rows.append([now.isoformat(), hora_consulta, name, "wunderground", fecha, tmax, tmin, unidad])
+                    dias_antes = (datetime.date.fromisoformat(fecha) - fecha_local_ciudad).days
+                    rows.append([now.isoformat(), hora_consulta, name, "wunderground", fecha, tmax, tmin, unidad, dias_antes])
                 partes_ciudad.append(formatear_bloque_fuente("2️⃣", "WU", wu_forecast, unidad))
             except Exception as e:
                 partes_ciudad.append(f"⚠️ WU error: {e}")
@@ -246,7 +270,8 @@ def main():
         try:
             yr_forecast = get_yr_forecast(lat, lon, tz_name, days, unidad)
             for fecha, tmax, tmin in yr_forecast:
-                rows.append([now.isoformat(), hora_consulta, name, "yr.no", fecha, tmax, tmin, unidad])
+                dias_antes = (datetime.date.fromisoformat(fecha) - fecha_local_ciudad).days
+                rows.append([now.isoformat(), hora_consulta, name, "yr.no", fecha, tmax, tmin, unidad, dias_antes])
             partes_ciudad.append(formatear_bloque_fuente("3️⃣", "YR", yr_forecast, unidad))
         except Exception as e:
             partes_ciudad.append(f"⚠️ Yr error: {e}")
