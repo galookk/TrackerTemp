@@ -36,9 +36,9 @@ YR_HEADERS = {
 
 DIAS_ES = {0: "LUNES", 1: "MARTES", 2: "MIÉRCOLES", 3: "JUEVES", 4: "VIERNES", 5: "SÁBADO", 6: "DOMINGO"}
 
-# Horas UTC (de las 12 corridas diarias) en las que SI se manda Telegram.
-# Corresponden a 21hs / 4hs / 10hs / 17hs hora Argentina.
-CHECKPOINT_HORAS_UTC = {0, 7, 13, 20}
+# Horas UTC (de las 15 corridas diarias) en las que SI se manda Telegram.
+# Corresponden a 10hs / 17hs / 21hs / 1hs hora Argentina.
+CHECKPOINT_HORAS_UTC = {13, 20, 0, 4}
 
 
 def nombre_dia(fecha_iso):
