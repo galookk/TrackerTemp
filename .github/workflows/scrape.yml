@@ -1,28 +1,14 @@
 name: Registrar pronosticos
 
 on:
-  # 15 horarios programados, cada uno como cron SEPARADO (en vez de uno
-  # combinado). Esto permite que el script sepa "que horario tenia que
-  # ser esta corrida" via github.event.schedule, sin importar si GitHub
-  # la arranca tarde por congestion (algo que pasa seguido).
-  # Ademas corren en el minuto :07 en vez de en punto -- el "en punto" de
-  # cada hora es el momento de mas carga en GitHub Actions a nivel global,
-  # asi que correr un poco desfasado reduce la chance de demora.
+  # 4 horarios diarios, bien separados entre si (mínimo 5hs de diferencia)
+  # para reducir al maximo la chance de que GitHub Actions salte una
+  # corrida por colision/congestion con otra cercana.
+  # 1am / 8am / 15hs / 20hs hora Argentina = 4/11/18/23 UTC
   schedule:
-    - cron: "7 0 * * *"
-    - cron: "7 2 * * *"
     - cron: "7 4 * * *"
-    - cron: "7 6 * * *"
-    - cron: "7 7 * * *"
-    - cron: "7 9 * * *"
     - cron: "7 11 * * *"
-    - cron: "7 13 * * *"
-    - cron: "7 14 * * *"
-    - cron: "7 15 * * *"
-    - cron: "7 17 * * *"
     - cron: "7 18 * * *"
-    - cron: "7 20 * * *"
-    - cron: "7 22 * * *"
     - cron: "7 23 * * *"
   # Permite dispararlo a mano desde la pestaña "Actions" para probar
   workflow_dispatch:
@@ -66,6 +52,3 @@ jobs:
           git add data/temperaturas.csv
           git diff --cached --quiet || git commit -m "Registro automatico $(date -u +'%Y-%m-%d %H:%M UTC')"
           git push
-
-
-          .
