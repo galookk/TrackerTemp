@@ -66,3 +66,6 @@ jobs:
           git add data/temperaturas.csv
           git diff --cached --quiet || git commit -m "Registro automatico $(date -u +'%Y-%m-%d %H:%M UTC')"
           git push
+
+
+          .
