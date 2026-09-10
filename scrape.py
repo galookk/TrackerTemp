@@ -28,6 +28,14 @@ BROWSER_HEADERS = {
     )
 }
 
+# Headers para el llamado a la API de pronostico de weather.com. Ademas del
+# User-Agent, le agregamos Referer/Origin -- si el sitio empezo a exigir que
+# el pedido "parezca" venir de una pagina real de wunderground.com (en vez
+# de rechazarlo directo con 401), esto lo deberia solucionar.
+WU_API_HEADERS = dict(BROWSER_HEADERS)
+WU_API_HEADERS["Referer"] = "https://www.wunderground.com/"
+WU_API_HEADERS["Origin"] = "https://www.wunderground.com"
+
 # Yr.no / MET Norway EXIGE un User-Agent identificable con forma de contacto.
 # Reemplazar el email por uno real antes de usar en produccion.
 YR_HEADERS = {
@@ -115,8 +123,19 @@ def get_wu_forecast(lat, lon, api_key, days, unidad="C"):
         "units": "e" if unidad == "F" else "m",
         "language": "en-US",
     }
-    resp = requests.get(url, params=params, headers=BROWSER_HEADERS, timeout=20)
-    resp.raise_for_status()
+    resp = requests.get(url, params=params, headers=WU_API_HEADERS, timeout=20)
+
+    if resp.status_code != 200:
+        # Diagnostico enriquecido: clave usada (enmascarada, para poder
+        # compararla con la que ves vos en el navegador sin exponerla
+        # entera) + lo que devolvio el servidor, para saber la causa real
+        # sin tener que adivinar la proxima vez que esto falle.
+        clave_enmascarada = f"{api_key[:6]}...{api_key[-4:]}" if len(api_key) > 12 else "(clave corta)"
+        cuerpo = resp.text[:250].replace("\n", " ")
+        raise RuntimeError(
+            f"weather.com respondio {resp.status_code} (clave usada: {clave_enmascarada}). Cuerpo: {cuerpo}"
+        )
+
     data = resp.json()
 
     max_temps = data.get("calendarDayTemperatureMax")
