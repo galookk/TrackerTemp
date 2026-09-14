@@ -44,9 +44,9 @@ YR_HEADERS = {
 
 DIAS_ES = {0: "LUNES", 1: "MARTES", 2: "MIÉRCOLES", 3: "JUEVES", 4: "VIERNES", 5: "SÁBADO", 6: "DOMINGO"}
 
-# Horas UTC (de las 15 corridas diarias) en las que SI se manda Telegram.
-# Corresponden a 10hs / 17hs / 21hs / 1hs hora Argentina.
-CHECKPOINT_HORAS_UTC = {13, 20, 0, 4}
+# Horas UTC en las que se manda Telegram. Son las UNICAS 4 horas en las
+# que corre el bot: 1am / 8am / 15hs / 20hs hora Argentina = 4/11/18/23 UTC.
+CHECKPOINT_HORAS_UTC = {4, 11, 18, 23}
 
 
 def nombre_dia(fecha_iso):
@@ -82,23 +82,18 @@ def get_wu_apikey():
     """
     resp = requests.get("https://www.wunderground.com/", headers=BROWSER_HEADERS, timeout=20)
 
-    # Intento 1: el formato clasico "apiKey":"xxxxx"
     match = re.search(r'"apiKey"\s*:\s*"([a-f0-9]{20,40})"', resp.text)
     if match:
         return match.group(1)
 
-    # Intento 2: cualquier variante razonable (comillas simples, sin espacio, etc.)
     match = re.search(r'apiKey["\']?\s*[:=]\s*["\']([a-f0-9]{20,40})["\']', resp.text, re.IGNORECASE)
     if match:
         return match.group(1)
 
-    # Intento 3: apiKey como parametro dentro de una URL, ej ...?apiKey=xxxxx&...
     match = re.search(r'[?&]apiKey=([a-f0-9]{20,40})', resp.text, re.IGNORECASE)
     if match:
         return match.group(1)
 
-    # Si no aparece de ninguna forma, junto contexto alrededor de "apikey"
-    # (si existe en cualquier capitalizacion) para diagnosticar por Telegram.
     lower = resp.text.lower()
     idx = lower.find("apikey")
     if idx != -1:
@@ -126,10 +121,6 @@ def get_wu_forecast(lat, lon, api_key, days, unidad="C"):
     resp = requests.get(url, params=params, headers=WU_API_HEADERS, timeout=20)
 
     if resp.status_code != 200:
-        # Diagnostico enriquecido: clave usada (enmascarada, para poder
-        # compararla con la que ves vos en el navegador sin exponerla
-        # entera) + lo que devolvio el servidor, para saber la causa real
-        # sin tener que adivinar la proxima vez que esto falle.
         clave_enmascarada = f"{api_key[:6]}...{api_key[-4:]}" if len(api_key) > 12 else "(clave corta)"
         cuerpo = resp.text[:250].replace("\n", " ")
         raise RuntimeError(
@@ -148,7 +139,7 @@ def get_wu_forecast(lat, lon, api_key, days, unidad="C"):
 
     resultado = []
     for fecha_iso, tmax, tmin in list(zip(valid_dates, max_temps, min_temps))[:days]:
-        fecha = fecha_iso[:10]  # "2026-08-12T07:00:00-0300" -> "2026-08-12"
+        fecha = fecha_iso[:10]
         resultado.append((fecha, tmax, tmin))
     return resultado
 
@@ -231,10 +222,10 @@ def send_telegram(text):
 
 def obtener_hora_objetivo(now):
     """Si esta corrida vino de un cron programado, usa la hora que estaba
-    PROGRAMADA (ej. "04:00"), no la hora real en que arranco el script --
-    GitHub Actions puede demorar una corrida programada 1-2 horas bajo
-    carga, y si usaramos la hora real, el dato quedaria mal etiquetado.
-    Si no viene de un cron (corrida manual), usa la hora real actual."""
+    PROGRAMADA (ej. "04:00"), no la hora real en que arranco el script.
+    Si no viene de un cron (corrida manual o disparada por el servicio
+    externo via workflow_dispatch), usa la hora real actual -- en ese caso
+    el servicio externo YA dispara a la hora exacta, asi que now es correcto."""
     cron_str = os.environ.get("CRON_PROGRAMADO", "").strip()
     if cron_str:
         partes = cron_str.split()
@@ -270,8 +261,6 @@ def main():
         unidad = city.get("unidad", "C")
         lat, lon, tz_name = city["lat"], city["lon"], city["tz"]
 
-        # Fecha de HOY en el huso horario propio de esta ciudad (no UTC, no ART) --
-        # es la referencia correcta para saber "cuantos dias antes" es cada dato.
         fecha_local_ciudad = now.astimezone(ZoneInfo(tz_name)).date()
 
         partes_ciudad = [f"{flag} <b>{name}</b>".strip()]
