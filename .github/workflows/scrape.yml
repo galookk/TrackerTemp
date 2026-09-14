@@ -1,16 +1,11 @@
 name: Registrar pronosticos
 
 on:
-  # 4 horarios diarios, bien separados entre si (mínimo 5hs de diferencia)
-  # para reducir al maximo la chance de que GitHub Actions salte una
-  # corrida por colision/congestion con otra cercana.
-  # 1am / 8am / 15hs / 20hs hora Argentina = 4/11/18/23 UTC
-  schedule:
-    - cron: "7 4 * * *"
-    - cron: "7 11 * * *"
-    - cron: "7 18 * * *"
-    - cron: "7 23 * * *"
-  # Permite dispararlo a mano desde la pestaña "Actions" para probar
+  # SIN "schedule:" a proposito. El disparo automatico ahora lo hace un
+  # servicio externo (cron-job.org) llamando a la API de GitHub para
+  # activar este mismo workflow_dispatch a la hora exacta -- mucho mas
+  # confiable que el cron interno de GitHub Actions, que demostro
+  # saltear corridas seguido bajo carga.
   workflow_dispatch:
     inputs:
       forzar_telegram:
