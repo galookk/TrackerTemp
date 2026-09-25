@@ -13,6 +13,7 @@ import json
 import re
 import os
 import csv
+import time
 import datetime
 from zoneinfo import ZoneInfo
 
@@ -28,25 +29,35 @@ BROWSER_HEADERS = {
     )
 }
 
-# Headers para el llamado a la API de pronostico de weather.com. Ademas del
-# User-Agent, le agregamos Referer/Origin -- si el sitio empezo a exigir que
-# el pedido "parezca" venir de una pagina real de wunderground.com (en vez
-# de rechazarlo directo con 401), esto lo deberia solucionar.
 WU_API_HEADERS = dict(BROWSER_HEADERS)
 WU_API_HEADERS["Referer"] = "https://www.wunderground.com/"
 WU_API_HEADERS["Origin"] = "https://www.wunderground.com"
 
-# Yr.no / MET Norway EXIGE un User-Agent identificable con forma de contacto.
-# Reemplazar el email por uno real antes de usar en produccion.
 YR_HEADERS = {
     "User-Agent": "temp-tracker-galo/1.0 github.com/TU_USUARIO/temp-tracker"
 }
 
 DIAS_ES = {0: "LUNES", 1: "MARTES", 2: "MIÉRCOLES", 3: "JUEVES", 4: "VIERNES", 5: "SÁBADO", 6: "DOMINGO"}
 
-# Horas UTC en las que se manda Telegram. Son las UNICAS 4 horas en las
-# que corre el bot: 1am / 8am / 15hs / 20hs hora Argentina = 4/11/18/23 UTC.
 CHECKPOINT_HORAS_UTC = {4, 11, 18, 23}
+
+
+def con_reintentos(func, intentos, espera_seg, *args, **kwargs):
+    """Ejecuta func(*args, **kwargs). Si tira una excepcion, espera
+    espera_seg segundos y reintenta, hasta 'intentos' veces en total.
+    Sirve para fallas pasajeras de red (que son la mayoria) -- si el
+    problema es de fondo (ej. una clave realmente invalida), va a seguir
+    fallando igual tras los reintentos, y ahi si se avisa por Telegram
+    como siempre."""
+    ultimo_error = None
+    for intento in range(1, intentos + 1):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            ultimo_error = e
+            if intento < intentos:
+                time.sleep(espera_seg)
+    raise ultimo_error
 
 
 def nombre_dia(fecha_iso):
@@ -55,7 +66,6 @@ def nombre_dia(fecha_iso):
 
 
 def formatear_bloque_fuente(emoji, nombre_fuente, forecast, unidad):
-    """forecast: lista de (fecha, temp_max, temp_min). Muestra solo la maxima."""
     lineas = [f"{emoji} {nombre_fuente}"]
     for fecha, tmax, _tmin in forecast:
         lineas.append(f"- {nombre_dia(fecha)} {fecha}: max {tmax}°{unidad}")
@@ -74,12 +84,6 @@ def load_config():
 
 
 def get_wu_apikey():
-    """Extrae el apiKey publico embebido en el HTML de wunderground.com.
-
-    Este apiKey no es secreto: es el mismo que el navegador de cualquier
-    visitante usa para pedirle el pronostico a api.weather.com. Si esto
-    deja de funcionar, es la primera pieza a revisar.
-    """
     resp = requests.get("https://www.wunderground.com/", headers=BROWSER_HEADERS, timeout=20)
 
     match = re.search(r'"apiKey"\s*:\s*"([a-f0-9]{20,40})"', resp.text)
@@ -108,8 +112,6 @@ def get_wu_apikey():
 
 
 def get_wu_forecast(lat, lon, api_key, days, unidad="C"):
-    """Devuelve lista de (fecha_local, temp_max, temp_min) segun WunderGround/weather.com.
-    Si unidad='F' le pide directamente Fahrenheit a la API (mas preciso que convertir despues)."""
     url = "https://api.weather.com/v3/wx/forecast/daily/5day"
     params = {
         "apiKey": api_key,
@@ -145,9 +147,6 @@ def get_wu_forecast(lat, lon, api_key, days, unidad="C"):
 
 
 def get_yr_forecast(lat, lon, tz_name, days, unidad="C"):
-    """Devuelve lista de (fecha_local, temp_max, temp_min) segun Yr.no,
-    agrupando los datos horarios por dia CALENDARIO LOCAL de la ciudad (no UTC).
-    Yr.no solo entrega Celsius; si unidad='F' se convierte aca."""
     url = "https://api.met.no/weatherapi/locationforecast/2.0/compact"
     params = {"lat": lat, "lon": lon}
     resp = requests.get(url, params=params, headers=YR_HEADERS, timeout=20)
@@ -189,7 +188,6 @@ def append_rows(rows):
 
 
 def send_to_sheets(rows):
-    """Manda las filas a la Google Sheet via el Web App de Apps Script (ver apps_script.gs)."""
     webhook_url = os.environ.get("GOOGLE_SHEETS_WEBHOOK_URL")
     if not webhook_url:
         print("Google Sheets no configurado (falta GOOGLE_SHEETS_WEBHOOK_URL), salteando")
@@ -221,11 +219,6 @@ def send_telegram(text):
 
 
 def obtener_hora_objetivo(now):
-    """Si esta corrida vino de un cron programado, usa la hora que estaba
-    PROGRAMADA (ej. "04:00"), no la hora real en que arranco el script.
-    Si no viene de un cron (corrida manual o disparada por el servicio
-    externo via workflow_dispatch), usa la hora real actual -- en ese caso
-    el servicio externo YA dispara a la hora exacta, asi que now es correcto."""
     cron_str = os.environ.get("CRON_PROGRAMADO", "").strip()
     if cron_str:
         partes = cron_str.split()
@@ -250,10 +243,10 @@ def main():
     bloques_mensaje = [f"Registro de pronosticos - {now.strftime('%Y-%m-%d %H:%M UTC')}"]
 
     try:
-        wu_key = get_wu_apikey()
+        wu_key = con_reintentos(get_wu_apikey, 3, 8)
     except Exception as e:
         wu_key = None
-        bloques_mensaje.append(f"⚠️ WunderGround no disponible esta corrida: {e}")
+        bloques_mensaje.append(f"⚠️ WunderGround no disponible esta corrida (tras 3 intentos): {e}")
 
     for city in config["cities"]:
         name = city["name"]
@@ -267,22 +260,22 @@ def main():
 
         if wu_key:
             try:
-                wu_forecast = get_wu_forecast(lat, lon, wu_key, days, unidad)
+                wu_forecast = con_reintentos(get_wu_forecast, 2, 5, lat, lon, wu_key, days, unidad)
                 for fecha, tmax, tmin in wu_forecast:
                     dias_antes = (datetime.date.fromisoformat(fecha) - fecha_local_ciudad).days
                     rows.append([now.isoformat(), hora_consulta, name, "wunderground", fecha, tmax, tmin, unidad, dias_antes])
                 partes_ciudad.append(formatear_bloque_fuente("2️⃣", "WU", wu_forecast, unidad))
             except Exception as e:
-                partes_ciudad.append(f"⚠️ WU error: {e}")
+                partes_ciudad.append(f"⚠️ WU error (tras 2 intentos): {e}")
 
         try:
-            yr_forecast = get_yr_forecast(lat, lon, tz_name, days, unidad)
+            yr_forecast = con_reintentos(get_yr_forecast, 2, 5, lat, lon, tz_name, days, unidad)
             for fecha, tmax, tmin in yr_forecast:
                 dias_antes = (datetime.date.fromisoformat(fecha) - fecha_local_ciudad).days
                 rows.append([now.isoformat(), hora_consulta, name, "yr.no", fecha, tmax, tmin, unidad, dias_antes])
             partes_ciudad.append(formatear_bloque_fuente("3️⃣", "YR", yr_forecast, unidad))
         except Exception as e:
-            partes_ciudad.append(f"⚠️ Yr error: {e}")
+            partes_ciudad.append(f"⚠️ Yr error (tras 2 intentos): {e}")
 
         bloques_mensaje.append("\n".join(partes_ciudad))
 
