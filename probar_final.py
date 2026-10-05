@@ -1,65 +1,95 @@
 """
-Prueba: trae la temperatura maxima OBSERVADA de ayer en la estacion de
-cada ciudad (WunderGround / weather.com) y la muestra en pantalla.
-No guarda nada, no toca tus datos. Solo sirve para comprobar que el
-metodo funciona y que coincide con lo que ves en wunderground.com.
+Prueba v2: prueba DOS formas de traer la temperatura maxima observada de
+ayer para cada ciudad de config.json, y muestra los resultados lado a lado.
+No guarda nada, no toca tus datos.
+
+  A = endpoint v3 "dailysummary" con la clave que ya usa tu bot
+  B = endpoint v1 "historical" (el que usa la pagina de historial de
+      wunderground) con la clave publica de esa pagina
 """
 
+import re
 import datetime
 import requests
 
-# Reutilizamos funciones que ya existen en scrape.py
-from scrape import get_wu_apikey, WU_API_HEADERS
+from scrape import get_wu_apikey, WU_API_HEADERS, load_config
 
-# nombre, codigo de estacion, pais, unidad
-CIUDADES = [
-    ("Austin", "KAUS", "US", "F"),
-    ("New York", "KLGA", "US", "F"),
-    ("Seattle", "KSEA", "US", "F"),
-    ("Buenos Aires", "SAEZ", "AR", "C"),
-    ("Amsterdam", "EHAM", "NL", "C"),
-    ("Londres", "EGLC", "GB", "C"),
-    ("Munich", "EDDM", "DE", "C"),
-    ("Tokyo", "RJTT", "JP", "C"),
-    ("Busan", "RKPK", "KR", "C"),
-]
+KEY_HISTORIAL = "e1f10a1e78da46f5b10a1e78da96f525"
+
+PAISES = {
+    "KAUS": "US", "KLGA": "US", "KSEA": "US", "KSFO": "US",
+    "SAEZ": "AR", "EHAM": "NL", "EGLC": "GB", "EDDM": "DE",
+    "RJTT": "JP", "RKPK": "KR", "WSSS": "SG", "NZWN": "NZ", "EFHK": "FI",
+}
 
 
-def maxima_observada(api_key, icao, pais, unidad, fecha_yyyymmdd):
-    url = f"https://api.weather.com/v1/location/{icao}:9:{pais}/observations/historical.json"
+def probar_a(key, lat, lon, unidad, fecha_iso):
+    url = "https://api.weather.com/v3/wx/conditions/historical/dailysummary/30day"
     params = {
-        "apiKey": api_key,
+        "apiKey": key,
+        "geocode": f"{lat},{lon}",
+        "format": "json",
         "units": "e" if unidad == "F" else "m",
-        "startDate": fecha_yyyymmdd,
-        "endDate": fecha_yyyymmdd,
+        "language": "en-US",
     }
     resp = requests.get(url, params=params, headers=WU_API_HEADERS, timeout=20)
     if resp.status_code != 200:
-        return None, 0, f"status {resp.status_code}: {resp.text[:120]}"
+        return f"error {resp.status_code}: {resp.text[:60]}"
+    data = resp.json()
+    maximas = data.get("temperatureMax") or data.get("calendarDayTemperatureMax")
+    fechas = data.get("validTimeLocal") or []
+    if not maximas or not fechas:
+        return f"respuesta rara, campos: {list(data.keys())[:8]}"
+    for f, t in zip(fechas, maximas):
+        if f[:10] == fecha_iso:
+            return f"max {t}"
+    return f"no estaba la fecha (ultima: {fechas[-1][:10]})"
+
+
+def probar_b(icao, pais, unidad, fecha_iso):
+    fecha = fecha_iso.replace("-", "")
+    url = f"https://api.weather.com/v1/location/{icao}:9:{pais}/observations/historical.json"
+    params = {
+        "apiKey": KEY_HISTORIAL,
+        "units": "e" if unidad == "F" else "m",
+        "startDate": fecha,
+        "endDate": fecha,
+    }
+    resp = requests.get(url, params=params, headers=WU_API_HEADERS, timeout=20)
+    if resp.status_code != 200:
+        return f"error {resp.status_code}: {resp.text[:60]}"
     obs = resp.json().get("observations", [])
     temps = [o["temp"] for o in obs if o.get("temp") is not None]
     if not temps:
-        return None, 0, "sin observaciones"
-    return max(temps), len(temps), ""
+        return "sin observaciones"
+    return f"max {max(temps)} ({len(temps)} obs)"
 
 
 def main():
-    ayer = datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=1)
-    fecha = ayer.strftime("%Y%m%d")
-    print(f"Fecha consultada: {ayer.isoformat()}")
-
+    ayer = (datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=1)).isoformat()
+    print(f"Fecha consultada: {ayer}\n")
     key = get_wu_apikey()
-    print("Clave obtenida OK\n")
+    print("Clave del bot obtenida OK\n")
 
-    for nombre, icao, pais, unidad in CIUDADES:
+    for city in load_config()["cities"]:
+        nombre = city["name"]
+        unidad = city.get("unidad", "C")
+        m = re.search(r"\(([A-Z]{4})", nombre)
+        icao = m.group(1) if m else None
+        pais = PAISES.get(icao)
+
         try:
-            tmax, n, error = maxima_observada(key, icao, pais, unidad, fecha)
+            a = probar_a(key, city["lat"], city["lon"], unidad, ayer)
         except Exception as e:
-            tmax, n, error = None, 0, str(e)
-        if tmax is None:
-            print(f"{nombre:14} ({icao}): ERROR -> {error}")
-        else:
-            print(f"{nombre:14} ({icao}): max {tmax}°{unidad}  ({n} observaciones)")
+            a = f"falla: {e}"
+        try:
+            b = probar_b(icao, pais, unidad, ayer) if icao and pais else "sin codigo de estacion en el nombre"
+        except Exception as e:
+            b = f"falla: {e}"
+
+        print(f"{nombre} [{unidad}]")
+        print(f"   A (v3, clave del bot):   {a}")
+        print(f"   B (v1, clave historial): {b}")
 
 
 if __name__ == "__main__":
