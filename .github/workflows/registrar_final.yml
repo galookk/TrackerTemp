@@ -1,0 +1,47 @@
+name: Registrar maximas observadas
+
+on:
+  schedule:
+    - cron: "0 8 * * *"   # 08:00 UTC = 05:00 hora Argentina
+  workflow_dispatch:
+    inputs:
+      dias_atras:
+        description: "Cuantos dias hacia atras (1 = ayer, 2 = anteayer)"
+        required: false
+        default: "1"
+
+jobs:
+  registrar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout del repo
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: pip install requests
+
+      - name: Correr el script
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GOOGLE_SHEETS_WEBHOOK_URL: ${{ secrets.GOOGLE_SHEETS_WEBHOOK_URL }}
+          DIAS_ATRAS: ${{ github.event.inputs.dias_atras }}
+        run: python registrar_final.py
+
+      - name: Commitear el CSV actualizado
+        run: |
+          git config user.name "temp-tracker-bot"
+          git config user.email "actions@github.com"
+          git add data/finales.csv
+          if ! git diff --cached --quiet; then
+            git commit -m "Maximas observadas $(date -u +'%Y-%m-%d')"
+            git pull --rebase
+            git push
+          fi
