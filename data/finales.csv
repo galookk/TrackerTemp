@@ -35,3 +35,12 @@ timestamp_utc,hora_consulta_utc,ciudad,fuente,fecha_objetivo,temp_max_c,temp_min
 2026-10-05T21:14:11.359498+00:00,final,Munich (EDDM),observado,2026-10-02,19,10,C,0
 2026-10-05T21:14:11.359498+00:00,final,Tokyo (RJTT - Haneda),observado,2026-10-03,22,19,C,0
 2026-10-05T21:14:11.359498+00:00,final,Busan (RKPK - Gimhae),observado,2026-10-03,25,14,C,0
+2026-10-05T21:17:01.250250+00:00,final,Austin (KAUS),observado,2026-10-01,87,73,F,0
+2026-10-05T21:17:01.250250+00:00,final,New York (KLGA - LaGuardia),observado,2026-10-01,78,67,F,0
+2026-10-05T21:17:01.250250+00:00,final,Seattle (KSEA - Tacoma),observado,2026-10-01,67,52,F,0
+2026-10-05T21:17:01.250250+00:00,final,Buenos Aires (SAEZ - Ezeiza),observado,2026-10-01,15,6,C,0
+2026-10-05T21:17:01.250250+00:00,final,Amsterdam (EHAM - Schiphol),observado,2026-10-01,21,13,C,0
+2026-10-05T21:17:01.250250+00:00,final,London (EGLC - City Airport),observado,2026-10-01,22,14,C,0
+2026-10-05T21:17:01.250250+00:00,final,Munich (EDDM),observado,2026-10-01,24,5,C,0
+2026-10-05T21:17:01.250250+00:00,final,Tokyo (RJTT - Haneda),observado,2026-10-02,23,19,C,0
+2026-10-05T21:17:01.250250+00:00,final,Busan (RKPK - Gimhae),observado,2026-10-02,25,12,C,0
