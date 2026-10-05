@@ -41,14 +41,23 @@ DIAS_ES = {0: "LUNES", 1: "MARTES", 2: "MIÉRCOLES", 3: "JUEVES", 4: "VIERNES", 
 
 CHECKPOINT_HORAS_UTC = {4, 11, 18, 23}
 
+# Cuantas veces se intenta conseguir una clave VALIDA de WunderGround, y
+# cuanto se espera entre intento e intento. Por experiencia, una clave
+# rota suele arreglarse sola despues de unos minutos (WU emite una nueva) --
+# por eso la espera es larga (minutos, no segundos).
+WU_KEY_INTENTOS = 3
+WU_KEY_ESPERA_SEG = 300  # 5 minutos
+
+# Reintentos cortos, por ciudad, una vez que ya tenemos una clave validada
+# (para fallas de red puntuales, no para claves rotas).
+WU_FORECAST_INTENTOS = 2
+WU_FORECAST_ESPERA_SEG = 5
+YR_INTENTOS = 2
+YR_ESPERA_SEG = 5
+
 
 def con_reintentos(func, intentos, espera_seg, *args, **kwargs):
-    """Ejecuta func(*args, **kwargs). Si tira una excepcion, espera
-    espera_seg segundos y reintenta, hasta 'intentos' veces en total.
-    Sirve para fallas pasajeras de red (que son la mayoria) -- si el
-    problema es de fondo (ej. una clave realmente invalida), va a seguir
-    fallando igual tras los reintentos, y ahi si se avisa por Telegram
-    como siempre."""
+    """Ejecuta func(*args, **kwargs), reintentando en caso de excepcion."""
     ultimo_error = None
     for intento in range(1, intentos + 1):
         try:
@@ -84,6 +93,7 @@ def load_config():
 
 
 def get_wu_apikey():
+    """Extrae el apiKey publico embebido en el HTML de wunderground.com."""
     resp = requests.get("https://www.wunderground.com/", headers=BROWSER_HEADERS, timeout=20)
 
     match = re.search(r'"apiKey"\s*:\s*"([a-f0-9]{20,40})"', resp.text)
@@ -144,6 +154,25 @@ def get_wu_forecast(lat, lon, api_key, days, unidad="C"):
         fecha = fecha_iso[:10]
         resultado.append((fecha, tmax, tmin))
     return resultado
+
+
+def obtener_wu_key_validada(lat_prueba, lon_prueba):
+    """Consigue un apiKey de WU y lo VALIDA haciendo un pedido de prueba real
+    contra el endpoint de pronostico. Si la clave esta rota/vencida, la
+    descarta por completo, espera WU_KEY_ESPERA_SEG, y va a buscar una
+    clave NUEVA desde cero (no reintenta con la misma) -- hasta
+    WU_KEY_INTENTOS veces en total."""
+    ultimo_error = None
+    for intento in range(1, WU_KEY_INTENTOS + 1):
+        try:
+            key = get_wu_apikey()
+            get_wu_forecast(lat_prueba, lon_prueba, key, 1, "C")  # pedido de prueba, descartamos el resultado
+            return key
+        except Exception as e:
+            ultimo_error = e
+            if intento < WU_KEY_INTENTOS:
+                time.sleep(WU_KEY_ESPERA_SEG)
+    raise ultimo_error
 
 
 def get_yr_forecast(lat, lon, tz_name, days, unidad="C"):
@@ -242,13 +271,23 @@ def main():
     rows = []
     bloques_mensaje = [f"Registro de pronosticos - {now.strftime('%Y-%m-%d %H:%M UTC')}"]
 
-    try:
-        wu_key = con_reintentos(get_wu_apikey, 3, 8)
-    except Exception as e:
-        wu_key = None
-        bloques_mensaje.append(f"⚠️ WunderGround no disponible esta corrida (tras 3 intentos): {e}")
+    cities = config["cities"]
 
-    for city in config["cities"]:
+    # Conseguimos y VALIDAMOS la clave de WU una sola vez, usando la primera
+    # ciudad de la lista como prueba. Si esta rota, reintenta con clave
+    # NUEVA cada WU_KEY_ESPERA_SEG segundos, hasta WU_KEY_INTENTOS veces.
+    wu_key = None
+    if cities:
+        primera = cities[0]
+        try:
+            wu_key = obtener_wu_key_validada(primera["lat"], primera["lon"])
+        except Exception as e:
+            minutos_totales = (WU_KEY_INTENTOS - 1) * WU_KEY_ESPERA_SEG // 60
+            bloques_mensaje.append(
+                f"⚠️ WunderGround no disponible esta corrida (tras {WU_KEY_INTENTOS} intentos en ~{minutos_totales} min): {e}"
+            )
+
+    for city in cities:
         name = city["name"]
         flag = city.get("flag", "")
         unidad = city.get("unidad", "C")
@@ -260,22 +299,22 @@ def main():
 
         if wu_key:
             try:
-                wu_forecast = con_reintentos(get_wu_forecast, 2, 5, lat, lon, wu_key, days, unidad)
+                wu_forecast = con_reintentos(get_wu_forecast, WU_FORECAST_INTENTOS, WU_FORECAST_ESPERA_SEG, lat, lon, wu_key, days, unidad)
                 for fecha, tmax, tmin in wu_forecast:
                     dias_antes = (datetime.date.fromisoformat(fecha) - fecha_local_ciudad).days
                     rows.append([now.isoformat(), hora_consulta, name, "wunderground", fecha, tmax, tmin, unidad, dias_antes])
                 partes_ciudad.append(formatear_bloque_fuente("2️⃣", "WU", wu_forecast, unidad))
             except Exception as e:
-                partes_ciudad.append(f"⚠️ WU error (tras 2 intentos): {e}")
+                partes_ciudad.append(f"⚠️ WU error: {e}")
 
         try:
-            yr_forecast = con_reintentos(get_yr_forecast, 2, 5, lat, lon, tz_name, days, unidad)
+            yr_forecast = con_reintentos(get_yr_forecast, YR_INTENTOS, YR_ESPERA_SEG, lat, lon, tz_name, days, unidad)
             for fecha, tmax, tmin in yr_forecast:
                 dias_antes = (datetime.date.fromisoformat(fecha) - fecha_local_ciudad).days
                 rows.append([now.isoformat(), hora_consulta, name, "yr.no", fecha, tmax, tmin, unidad, dias_antes])
             partes_ciudad.append(formatear_bloque_fuente("3️⃣", "YR", yr_forecast, unidad))
         except Exception as e:
-            partes_ciudad.append(f"⚠️ Yr error (tras 2 intentos): {e}")
+            partes_ciudad.append(f"⚠️ Yr error: {e}")
 
         bloques_mensaje.append("\n".join(partes_ciudad))
 
