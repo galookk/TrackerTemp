@@ -141,6 +141,21 @@ def get_wu_forecast(lat, lon, api_key, days, unidad="C"):
 
     data = resp.json()
 
+    # DIAGNOSTICO TEMPORAL: muestra los datos "crudos" de WU en el log de GitHub Actions
+    # (no se manda a Telegram ni a Sheets). Se puede borrar cuando se resuelva lo de las 20h.
+    try:
+        _dp = ((data.get("daypart") or [{}])[0] or {}).get("temperature") or []
+        _ahora = datetime.datetime.now(datetime.timezone.utc).strftime("%H:%M")
+        print(
+            f"[WU-DEBUG] {lat},{lon} {_ahora}UTC "
+            f"fechas={[str(d)[:16] for d in (data.get('validTimeLocal') or [])[:3]]} "
+            f"calendarMax={(data.get('calendarDayTemperatureMax') or [])[:3]} "
+            f"temperatureMax={(data.get('temperatureMax') or [])[:3]} "
+            f"daypartTemp={_dp[:6]}"
+        )
+    except Exception as _e:
+        print(f"[WU-DEBUG] no se pudo mostrar: {_e}")
+
     max_temps = data.get("calendarDayTemperatureMax")
     min_temps = data.get("calendarDayTemperatureMin")
     valid_dates = data.get("validTimeLocal")
