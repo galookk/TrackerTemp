@@ -27,6 +27,7 @@ PAISES = {
     "KAUS": "US", "KLGA": "US", "KSEA": "US", "KSFO": "US",
     "SAEZ": "AR", "EHAM": "NL", "EGLC": "GB", "EDDM": "DE",
     "RJTT": "JP", "RKPK": "KR", "WSSS": "SG", "NZWN": "NZ", "EFHK": "FI",
+    "LFPB": "FR", "LIMC": "IT", "LEMD": "ES", "SBGR": "BR", "MMMX": "MX",
 }
 
 COLUMNAS = ["timestamp_utc", "hora_consulta_utc", "ciudad", "fuente",
