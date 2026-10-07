@@ -61,20 +61,49 @@
       "tz": "Europe/Berlin"
     },
     {
-      "name": "Tokyo (RJTT - Haneda)",
-      "nombre_local": "Tokyo",
-      "flag": "🇯🇵",
-      "lat": 35.5497,
-      "lon": 139.7870,
-      "tz": "Asia/Tokyo"
+      "name": "Paris (LFPB - Le Bourget)",
+      "nombre_local": "Paris",
+      "flag": "🇫🇷",
+      "lat": 48.9694,
+      "lon": 2.4417,
+      "tz": "Europe/Paris",
+      "usar_yr": false
     },
     {
-      "name": "Busan (RKPK - Gimhae)",
-      "nombre_local": "Busan",
-      "flag": "🇰🇷",
-      "lat": 35.1795,
-      "lon": 128.9380,
-      "tz": "Asia/Seoul"
+      "name": "Milan (LIMC - Malpensa)",
+      "nombre_local": "Milan",
+      "flag": "🇮🇹",
+      "lat": 45.6303,
+      "lon": 8.7231,
+      "tz": "Europe/Rome",
+      "usar_yr": false
+    },
+    {
+      "name": "Madrid (LEMD - Barajas)",
+      "nombre_local": "Madrid",
+      "flag": "🇪🇸",
+      "lat": 40.4719,
+      "lon": -3.5626,
+      "tz": "Europe/Madrid",
+      "usar_yr": false
+    },
+    {
+      "name": "Sao Paulo (SBGR - Guarulhos)",
+      "nombre_local": "Sao Paulo",
+      "flag": "🇧🇷",
+      "lat": -23.4356,
+      "lon": -46.4731,
+      "tz": "America/Sao_Paulo",
+      "usar_yr": false
+    },
+    {
+      "name": "Mexico City (MMMX)",
+      "nombre_local": "CDMX",
+      "flag": "🇲🇽",
+      "lat": 19.4363,
+      "lon": -99.0721,
+      "tz": "America/Mexico_City",
+      "usar_yr": false
     }
   ]
 }
