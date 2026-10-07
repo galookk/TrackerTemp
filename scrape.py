@@ -307,14 +307,16 @@ def main():
             except Exception as e:
                 partes_ciudad.append(f"⚠️ WU error: {e}")
 
-        try:
-            yr_forecast = con_reintentos(get_yr_forecast, YR_INTENTOS, YR_ESPERA_SEG, lat, lon, tz_name, days, unidad)
-            for fecha, tmax, tmin in yr_forecast:
-                dias_antes = (datetime.date.fromisoformat(fecha) - fecha_local_ciudad).days
-                rows.append([now.isoformat(), hora_consulta, name, "yr.no", fecha, tmax, tmin, unidad, dias_antes])
-            partes_ciudad.append(formatear_bloque_fuente("3️⃣", "YR", yr_forecast, unidad))
-        except Exception as e:
-            partes_ciudad.append(f"⚠️ Yr error: {e}")
+        # Si la ciudad tiene "usar_yr": false en config.json, se saltea Yr.no
+        if city.get("usar_yr", True):
+            try:
+                yr_forecast = con_reintentos(get_yr_forecast, YR_INTENTOS, YR_ESPERA_SEG, lat, lon, tz_name, days, unidad)
+                for fecha, tmax, tmin in yr_forecast:
+                    dias_antes = (datetime.date.fromisoformat(fecha) - fecha_local_ciudad).days
+                    rows.append([now.isoformat(), hora_consulta, name, "yr.no", fecha, tmax, tmin, unidad, dias_antes])
+                partes_ciudad.append(formatear_bloque_fuente("3️⃣", "YR", yr_forecast, unidad))
+            except Exception as e:
+                partes_ciudad.append(f"⚠️ Yr error: {e}")
 
         bloques_mensaje.append("\n".join(partes_ciudad))
 
