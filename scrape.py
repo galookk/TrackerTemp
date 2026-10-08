@@ -314,7 +314,11 @@ def main():
 
         if wu_key:
             try:
-                wu_forecast = con_reintentos(get_wu_forecast, WU_FORECAST_INTENTOS, WU_FORECAST_ESPERA_SEG, lat, lon, wu_key, days, unidad)
+                # Pedimos 1 dia de mas porque, de madrugada (hora local), WU todavia lista como
+                # primer dia el dia que YA TERMINO (ej. a las 01:00 del 8 sigue mostrando el 7).
+                # Ese dia viejo se descarta: ya no es un pronostico.
+                wu_forecast = con_reintentos(get_wu_forecast, WU_FORECAST_INTENTOS, WU_FORECAST_ESPERA_SEG, lat, lon, wu_key, days + 1, unidad)
+                wu_forecast = [f for f in wu_forecast if datetime.date.fromisoformat(f[0]) >= fecha_local_ciudad][:days]
                 for fecha, tmax, tmin in wu_forecast:
                     dias_antes = (datetime.date.fromisoformat(fecha) - fecha_local_ciudad).days
                     rows.append([now.isoformat(), hora_consulta, name, "wunderground", fecha, tmax, tmin, unidad, dias_antes])
