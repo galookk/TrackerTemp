@@ -121,6 +121,31 @@ def get_wu_apikey():
     )
 
 
+DIAS_EN = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6}
+
+# Ultima linea de diagnostico de WU (la usa main() para mandarla por Telegram a las 20h ART).
+ULTIMO_WU_DEBUG = ""
+
+
+def corregir_fecha_por_dia_semana(fecha, nombre_dia):
+    """WU manda, para cada dia, su fecha (validTimeLocal) y su nombre de dia (dayOfWeek).
+    Si no coinciden (ej. la fecha dice jueves 8 pero el dia dice Wednesday), la fecha esta
+    corrida un dia respecto de los valores: se usa el dia de la semana, que viaja junto con
+    los valores, y se devuelve la fecha mas cercana con ese dia."""
+    try:
+        wd = DIAS_EN.get(str(nombre_dia).strip().lower())
+        d = datetime.date.fromisoformat(fecha)
+    except Exception:
+        return fecha
+    if wd is None or d.weekday() == wd:
+        return fecha
+    for k in (-1, 1, -2, 2, -3, 3):
+        d2 = d + datetime.timedelta(days=k)
+        if d2.weekday() == wd:
+            return d2.isoformat()
+    return fecha
+
+
 def get_wu_forecast(lat, lon, api_key, days, unidad="C"):
     url = "https://api.weather.com/v3/wx/forecast/daily/5day"
     params = {
@@ -141,21 +166,6 @@ def get_wu_forecast(lat, lon, api_key, days, unidad="C"):
 
     data = resp.json()
 
-    # DIAGNOSTICO TEMPORAL: muestra los datos "crudos" de WU en el log de GitHub Actions
-    # (no se manda a Telegram ni a Sheets). Se puede borrar cuando se resuelva lo de las 20h.
-    try:
-        _dp = ((data.get("daypart") or [{}])[0] or {}).get("temperature") or []
-        _ahora = datetime.datetime.now(datetime.timezone.utc).strftime("%H:%M")
-        print(
-            f"[WU-DEBUG] {lat},{lon} {_ahora}UTC "
-            f"fechas={[str(d)[:16] for d in (data.get('validTimeLocal') or [])[:3]]} "
-            f"calendarMax={(data.get('calendarDayTemperatureMax') or [])[:3]} "
-            f"temperatureMax={(data.get('temperatureMax') or [])[:3]} "
-            f"daypartTemp={_dp[:6]}"
-        )
-    except Exception as _e:
-        print(f"[WU-DEBUG] no se pudo mostrar: {_e}")
-
     max_temps = data.get("calendarDayTemperatureMax")
     min_temps = data.get("calendarDayTemperatureMin")
     valid_dates = data.get("validTimeLocal")
@@ -163,11 +173,35 @@ def get_wu_forecast(lat, lon, api_key, days, unidad="C"):
         raise RuntimeError(f"Respuesta inesperada de weather.com: {str(data)[:300]}")
 
     min_temps = min_temps or [None] * len(max_temps)
+    dias_semana = data.get("dayOfWeek") or []
 
     resultado = []
-    for fecha_iso, tmax, tmin in list(zip(valid_dates, max_temps, min_temps))[:days]:
+    hubo_ajuste = False
+    for i, (fecha_iso, tmax, tmin) in enumerate(list(zip(valid_dates, max_temps, min_temps))[:days]):
         fecha = fecha_iso[:10]
+        if i < len(dias_semana):
+            fecha_ok = corregir_fecha_por_dia_semana(fecha, dias_semana[i])
+            if fecha_ok != fecha:
+                hubo_ajuste = True
+            fecha = fecha_ok
         resultado.append((fecha, tmax, tmin))
+
+    # DIAGNOSTICO TEMPORAL: datos "crudos" de WU (log de GitHub y, a las 20h ART, Telegram).
+    global ULTIMO_WU_DEBUG
+    try:
+        dp = ((data.get("daypart") or [{}])[0] or {}).get("temperature") or []
+        ahora = datetime.datetime.now(datetime.timezone.utc).strftime("%H:%M")
+        ULTIMO_WU_DEBUG = (
+            f"{ahora}UTC fechas={[str(d)[5:10] for d in valid_dates[:3]]} "
+            f"dia={[str(x)[:3] for x in dias_semana[:3]]} "
+            f"cal={list(max_temps[:3])} tmax={(data.get('temperatureMax') or [])[:3]} dp={dp[:4]}"
+            + (f" CORREGIDO={[r[0][5:] for r in resultado[:3]]}" if hubo_ajuste else "")
+        )
+        print(f"[WU-DEBUG] {lat},{lon} {ULTIMO_WU_DEBUG}")
+    except Exception as e:
+        ULTIMO_WU_DEBUG = f"(no se pudo armar: {e})"
+        print(f"[WU-DEBUG] {ULTIMO_WU_DEBUG}")
+
     return resultado
 
 
@@ -287,6 +321,7 @@ def main():
     bloques_mensaje = [f"Registro de pronosticos - {now.strftime('%Y-%m-%d %H:%M UTC')}"]
 
     cities = config["cities"]
+    debug_europa = []
 
     # Conseguimos y VALIDAMOS la clave de WU una sola vez, usando la primera
     # ciudad de la lista como prueba. Si esta rota, reintenta con clave
@@ -319,6 +354,8 @@ def main():
                 # Ese dia viejo se descarta: ya no es un pronostico.
                 wu_forecast = con_reintentos(get_wu_forecast, WU_FORECAST_INTENTOS, WU_FORECAST_ESPERA_SEG, lat, lon, wu_key, days + 1, unidad)
                 wu_forecast = [f for f in wu_forecast if datetime.date.fromisoformat(f[0]) >= fecha_local_ciudad][:days]
+                if tz_name.startswith("Europe/"):
+                    debug_europa.append(f"{name.split(' (')[0]}: {ULTIMO_WU_DEBUG}")
                 for fecha, tmax, tmin in wu_forecast:
                     dias_antes = (datetime.date.fromisoformat(fecha) - fecha_local_ciudad).days
                     rows.append([now.isoformat(), hora_consulta, name, "wunderground", fecha, tmax, tmin, unidad, dias_antes])
@@ -346,6 +383,9 @@ def main():
     mensaje_final = "\n\n".join(bloques_mensaje)
     if es_checkpoint:
         send_telegram(mensaje_final)
+        # DIAGNOSTICO TEMPORAL: a las 20h ART (23 UTC) y en pruebas manuales, segundo mensaje con los datos crudos de WU en Europa
+        if debug_europa and (hora_num == 23 or os.environ.get("FORZAR_TELEGRAM") == "true"):
+            send_telegram("🔧 Diagnostico WU Europa\n" + "\n".join(l.replace("<", "").replace(">", "") for l in debug_europa))
     else:
         print("(corrida silenciosa, no es horario de aviso -> no se manda Telegram)")
     print(mensaje_final)
