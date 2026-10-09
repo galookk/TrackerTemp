@@ -323,6 +323,8 @@ def obtener_hora_objetivo(now):
 def main():
     config = load_config()
     days = config.get("dias_a_registrar", 3)
+    # "maxima_web": true  -> WU se guarda con la maxima diurna (la misma que muestra la pestaña de 10 dias de la web)
+    maxima_web = bool(config.get("maxima_web", False))
     now = datetime.datetime.now(datetime.timezone.utc)
     hora_consulta = obtener_hora_objetivo(now)
     hora_num = int(hora_consulta[:2])
@@ -364,8 +366,10 @@ def main():
                 # primer dia el dia que YA TERMINO (ej. a las 01:00 del 8 sigue mostrando el 7).
                 # Ese dia viejo se descarta: ya no es un pronostico.
                 hora_local = now.astimezone(ZoneInfo(tz_name)).hour
-                diurna = tz_name.startswith("Europe/") and hora_local < 2
-                wu_forecast = con_reintentos(get_wu_forecast, WU_FORECAST_INTENTOS, WU_FORECAST_ESPERA_SEG, lat, lon, wu_key, days + 1, unidad, modo_diurno=diurna)
+                diurna = maxima_web or (tz_name.startswith("Europe/") and hora_local < 2)
+                lat_wu = city.get("lat_wu", lat)
+                lon_wu = city.get("lon_wu", lon)
+                wu_forecast = con_reintentos(get_wu_forecast, WU_FORECAST_INTENTOS, WU_FORECAST_ESPERA_SEG, lat_wu, lon_wu, wu_key, days + 1, unidad, modo_diurno=diurna)
                 wu_forecast = [f for f in wu_forecast if datetime.date.fromisoformat(f[0]) >= fecha_local_ciudad][:days]
                 if tz_name.startswith("Europe/"):
                     debug_europa.append(f"{name.split(' (')[0]}: {ULTIMO_WU_DEBUG}")
