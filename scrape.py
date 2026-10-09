@@ -146,7 +146,7 @@ def corregir_fecha_por_dia_semana(fecha, nombre_dia):
     return fecha
 
 
-def get_wu_forecast(lat, lon, api_key, days, unidad="C"):
+def get_wu_forecast(lat, lon, api_key, days, unidad="C", modo_diurno=False):
     url = "https://api.weather.com/v3/wx/forecast/daily/5day"
     params = {
         "apiKey": api_key,
@@ -175,9 +175,19 @@ def get_wu_forecast(lat, lon, api_key, days, unidad="C"):
     min_temps = min_temps or [None] * len(max_temps)
     dias_semana = data.get("dayOfWeek") or []
 
+    # modo_diurno: justo despues de la medianoche local, el campo "calendarDayTemperatureMax" de WU
+    # viene desfasado un dia en algunas ciudades (trae el valor del dia anterior). En ese horario se
+    # usa "temperatureMax", la maxima diurna: es la misma que muestra la web de Wunderground.
+    cal_original = list(max_temps)
+    if modo_diurno:
+        tmax_dia = data.get("temperatureMax") or []
+        max_temps = [tmax_dia[i] if i < len(tmax_dia) else None for i in range(len(valid_dates))]
+
     resultado = []
     hubo_ajuste = False
     for i, (fecha_iso, tmax, tmin) in enumerate(list(zip(valid_dates, max_temps, min_temps))[:days]):
+        if modo_diurno and tmax is None:
+            continue  # dia ya terminado (la maxima diurna ya paso): no hay pronostico que guardar
         fecha = fecha_iso[:10]
         if i < len(dias_semana):
             fecha_ok = corregir_fecha_por_dia_semana(fecha, dias_semana[i])
@@ -194,8 +204,9 @@ def get_wu_forecast(lat, lon, api_key, days, unidad="C"):
         ULTIMO_WU_DEBUG = (
             f"{ahora}UTC fechas={[str(d)[5:10] for d in valid_dates[:3]]} "
             f"dia={[str(x)[:3] for x in dias_semana[:3]]} "
-            f"cal={list(max_temps[:3])} tmax={(data.get('temperatureMax') or [])[:3]} dp={dp[:4]}"
+            f"cal={cal_original[:3]} tmax={(data.get('temperatureMax') or [])[:3]} dp={dp[:4]}"
             + (f" CORREGIDO={[r[0][5:] for r in resultado[:3]]}" if hubo_ajuste else "")
+            + (" MODO=diurna" if modo_diurno else "")
         )
         print(f"[WU-DEBUG] {lat},{lon} {ULTIMO_WU_DEBUG}")
     except Exception as e:
@@ -352,7 +363,9 @@ def main():
                 # Pedimos 1 dia de mas porque, de madrugada (hora local), WU todavia lista como
                 # primer dia el dia que YA TERMINO (ej. a las 01:00 del 8 sigue mostrando el 7).
                 # Ese dia viejo se descarta: ya no es un pronostico.
-                wu_forecast = con_reintentos(get_wu_forecast, WU_FORECAST_INTENTOS, WU_FORECAST_ESPERA_SEG, lat, lon, wu_key, days + 1, unidad)
+                hora_local = now.astimezone(ZoneInfo(tz_name)).hour
+                diurna = tz_name.startswith("Europe/") and hora_local < 2
+                wu_forecast = con_reintentos(get_wu_forecast, WU_FORECAST_INTENTOS, WU_FORECAST_ESPERA_SEG, lat, lon, wu_key, days + 1, unidad, modo_diurno=diurna)
                 wu_forecast = [f for f in wu_forecast if datetime.date.fromisoformat(f[0]) >= fecha_local_ciudad][:days]
                 if tz_name.startswith("Europe/"):
                     debug_europa.append(f"{name.split(' (')[0]}: {ULTIMO_WU_DEBUG}")
