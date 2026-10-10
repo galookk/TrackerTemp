@@ -116,3 +116,15 @@ timestamp_utc,hora_consulta_utc,ciudad,fuente,fecha_objetivo,temp_max_c,temp_min
 2026-10-09T14:57:51.380338+00:00,final,Madrid (LEMD - Barajas),observado,2026-10-08,20,12,C,0
 2026-10-09T14:57:51.380338+00:00,final,Sao Paulo (SBGR - Guarulhos),observado,2026-10-08,33,17,C,0
 2026-10-09T14:57:51.380338+00:00,final,Mexico City (MMMX),observado,2026-10-08,20,14,C,0
+2026-10-10T14:12:53.392429+00:00,final,Austin (KAUS),observado,2026-10-09,91,62,F,0
+2026-10-10T14:12:53.392429+00:00,final,New York (KLGA - LaGuardia),observado,2026-10-09,73,59,F,0
+2026-10-10T14:12:53.392429+00:00,final,Seattle (KSEA - Tacoma),observado,2026-10-09,58,51,F,0
+2026-10-10T14:12:53.392429+00:00,final,Buenos Aires (SAEZ - Ezeiza),observado,2026-10-09,16,10,C,0
+2026-10-10T14:12:53.392429+00:00,final,Amsterdam (EHAM - Schiphol),observado,2026-10-09,18,10,C,0
+2026-10-10T14:12:53.392429+00:00,final,London (EGLC - City Airport),observado,2026-10-09,20,12,C,0
+2026-10-10T14:12:53.392429+00:00,final,Munich (EDDM),observado,2026-10-09,16,5,C,0
+2026-10-10T14:12:53.392429+00:00,final,Paris (LFPB - Le Bourget),observado,2026-10-09,17,7,C,0
+2026-10-10T14:12:53.392429+00:00,final,Milan (LIMC - Malpensa),observado,2026-10-09,23,13,C,0
+2026-10-10T14:12:53.392429+00:00,final,Madrid (LEMD - Barajas),observado,2026-10-09,21,6,C,0
+2026-10-10T14:12:53.392429+00:00,final,Sao Paulo (SBGR - Guarulhos),observado,2026-10-09,34,19,C,0
+2026-10-10T14:12:53.392429+00:00,final,Mexico City (MMMX),observado,2026-10-09,20,14,C,0
